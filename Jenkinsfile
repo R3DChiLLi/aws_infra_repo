@@ -2,15 +2,14 @@ pipeline {
     agent any
 
     stages {
-        agent {
-            docker {
-                image 'amazon/aws-cli'
-                args "--rm --entrypoint='' --network=host"
-                reuseNode true
-            }
-        }
-        }
         stage('Deploying Stack on Cloudformation') {
+            agent {
+                docker {
+                    image 'amazon/aws-cli'
+                    args "--rm --entrypoint='' --network=host"
+                    reuseNode true
+                }
+            }
             steps {
                 sh '''
                 aws cloudformation deploy \
@@ -20,5 +19,6 @@ pipeline {
                 --region us-east-1 \
                 '''
             }
+        }
         }
 }
