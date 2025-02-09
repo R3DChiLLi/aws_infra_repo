@@ -1,0 +1,764 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  EC2Instance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: t2.micro  # You can change this based on your needs
+      ImageId: ami-0453ec754f44f9a4a
+      SecurityGroupIds:
+        - 'launch-wizard-1'  # Your existing security group
+      AvailabilityZone: us-east-1a
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 8  # 8GB root volume
+            VolumeType: gp2
+      IamInstanceProfile:
+        Ref: EC2InstanceRoleAttachment  # Attach the IAM Instance Profile to the EC2 instance
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          sudo yum install httpd -y
+          yum install -y curl
+          sudo systemctl start httpd
+          sudo systemctl enable httpd
+
+          # Update and install necessary tools
+          sudo yum update -y
+          sudo yum install -y nodejs npm git
+          sleep 10
+
+          # Clone the repository
+          cd /var/www/html/
+          rm -rf index.html
+          git clone https://github.com/R3DChiLLi/user-form-app.git
+          mv user-form-app/index.html index.html
+          rm -rf user-form-app
+          
+          # Get the current public IPv4 address
+          current_ip=$(curl -s ifconfig.me)
+
+          # File path of index.html
+          file_path="/var/www/html/index.html"
+
+          # Update the IP in the fetch URL using sed
+          sed -i "s|http://[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}:3000|http://${current_ip}:3000|g" "$file_path"
+
+          cd /home/ec2-user/
+          git clone https://github.com/R3DChiLLi/user-form-app.git
+          cd user-form-app
+          rm -rf index.html
+
+          # Install dependencies
+          npm install
+          sleep 7
+          # Run the app
+          node app.js
+
+  EC2InstanceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Action:
+              - 'sts:AssumeRole'
+            Principal:
+              Service: 'ec2.amazonaws.com'
+      Policies:
+        - PolicyName: 'S3FullAccessPolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 's3:*'
+                Resource: '*'
+
+  EC2InstanceRoleAttachment:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Roles:
+        - Ref: 'EC2InstanceRole'  # Reference the IAM role
+
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: 'project-bucket-for-json-file'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: 's3:ObjectCreated:*'
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: '.json'
+            Function: 'arn:aws:lambda:us-east-1:205930633177:function:lambda-func-for-reading'
+          - Event: 's3:ObjectCreated:*'
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: '.csv'
+            Function: 'arn:aws:lambda:us-east-1:205930633177:function:lambda-func-for-reading'
+    DependsOn:
+      - LambdaExecutionRole  # Wait for the Lambda Execution Role to be created first
+      # - LambdaInvokePolicy   # Wait for the Lambda Invoke Policy to be created first
+      - LambdaFunction
+
+  S3BucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref 'S3Bucket'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !Sub 'arn:aws:s3:::project-bucket-for-json-file/*'
+              - !Sub 'arn:aws:s3:::project-bucket-for-json-file'
+    DependsOn:
+      - S3Bucket
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service: lambda.amazonaws.com
+      Policies:
+        - PolicyName: LambdaS3FullAccessPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - arn:aws:s3:::project-bucket-for-json
+                  - arn:aws:s3:::project-bucket-for-json/*
+
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: arn:aws:logs:us-east-1:205930633177:*
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                Resource: arn:aws:logs:us-east-1:205930633177:log-group:/aws/lambda/lambda-func-for-reading:*
+              - Effect: Allow
+                Action:
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:us-east-1:205930633177:log-group:/aws/lambda/lambda-func-for-reading:*
+        - PolicyName: LambdaDynamoDBFullAccessPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:*
+                Resource: "*" 
+
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: lambda-func-for-reading
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: python3.8
+      Timeout: 10
+      MemorySize: 128
+      Code:
+        ZipFile: |
+          import boto3
+          import csv
+          import json
+          from botocore.exceptions import ClientError
+          from decimal import Decimal
+
+
+          # Initialize AWS resources
+          dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
+          s3_client = boto3.client('s3')
+
+          def check_and_create_table(table_name):
+              """Check if DynamoDB table exists, and create it if not."""
+              try:
+                  # Try to get the table object
+                  table = dynamodb.Table(table_name)
+                  table.load()  # This will raise an exception if the table doesn't exist
+                  print(f"Table '{table_name}' exists.")
+              except ClientError as e:
+                  if e.response['Error']['Code'] == 'ResourceNotFoundException':
+                      print(f"Table '{table_name}' does not exist. Creating table...")
+                      # Creating table using resource client
+                      dynamodb.create_table(
+                          TableName=table_name,
+                          AttributeDefinitions=[{'AttributeName': 'invoice_id', 'AttributeType': 'S'}],  # Partition key attribute
+                          KeySchema=[{'AttributeName': 'invoice_id', 'KeyType': 'HASH'}],
+                          BillingMode='PAY_PER_REQUEST',
+                          StreamSpecification={
+                              'StreamEnabled': True,
+                              'StreamViewType': 'NEW_AND_OLD_IMAGES'  # Capture both new and old images
+                          },
+                      )
+                      print(f"Table '{table_name}' is being created...")
+
+                      # Wait until the table is created
+                      table.wait_until_exists()
+                      print(f"Table '{table_name}' is now active.")
+                  else:
+                      raise e
+
+          def process_csv(file_content):
+              """Process a CSV file with dynamic field handling."""
+              try:
+                  # Decode the file content, fallback to latin1 if utf-8 fails
+                  try:
+                      file_content_decoded = file_content.decode('utf-8')
+                  except UnicodeDecodeError:
+                      file_content_decoded = file_content.decode('latin1')
+
+                  # Parse CSV
+                  csv_reader = csv.DictReader(file_content_decoded.splitlines())  # Automatically uses headers
+                  data = []
+
+                  for row in csv_reader:
+                      # Convert invoice_amount to Decimal if it exists
+                      if "invoice_amount" in row and row["invoice_amount"]:
+                          row["invoice_amount"] = Decimal(row["invoice_amount"])
+                      
+                      print(f"Processed CSV Row: {row}")
+                      data.append(row)
+
+                  return data
+              except Exception as e:
+                  raise ValueError(f"Error processing CSV file: {str(e)}")
+
+          def process_json(file_content):
+              """Process a JSON file."""
+              try:
+                  file_content_decoded = file_content.decode('utf-8')
+                  json_data = json.loads(file_content_decoded)
+                  json_data_updated = [json_data]
+                  print(f"Processed JSON Data: {json_data_updated}")
+                  return json_data_updated
+              except json.JSONDecodeError as e:
+                  raise ValueError(f"Error decoding JSON file: {str(e)}")
+
+          def func_for_put_item_in_dynamodb(data, table_name):
+              """Insert data into DynamoDB table dynamically."""
+              table = dynamodb.Table(table_name)
+              
+              for item in data:
+                  # Convert invoice_amount to Decimal to ensure compatibility with DynamoDB
+                  item['invoice_amount'] = Decimal(item['invoice_amount'])
+                  
+                  table.put_item(Item=item)
+                  print(f"Inserted item into DynamoDB: {item}")
+              
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps({'message': 'File processed and data inserted into DynamoDB successfully', 'data': data})
+              }
+
+          def lambda_handler(event, context):
+              table_name = "VendorInvoices"
+              bucket_name = event['Records'][0]['s3']['bucket']['name']
+              file_key = event['Records'][0]['s3']['object']['key']
+              print(event)
+              object_key = event["Records"][0]["s3"]["object"]["key"]
+              tags_response = s3_client.get_object_tagging(
+                  Bucket='project-bucket-for-json-file',
+                  Key=object_key,
+              )
+              print(f"Tags are: \n: {tags_response}")
+
+
+
+              try:
+                  # Check if the DynamoDB table exists, and create it if not
+                  check_and_create_table(table_name)
+                  
+                  # Fetch the file from S3
+                  response = s3_client.get_object(Bucket=bucket_name, Key=file_key)
+                  file_content = response['Body'].read()
+                  
+                  # Process the file based on its type
+                  if file_key.endswith('.csv'):
+                      data = process_csv(file_content)
+                  elif file_key.endswith('.json'):
+                      data = process_json(file_content)
+                  else:
+                      return {
+                          'statusCode': 400,
+                          'body': json.dumps({'message': 'Unsupported file type. Only CSV and JSON are supported.'})
+                      }
+
+                  email = None
+                  for tag in tags_response["TagSet"]:
+                      if tag["Key"] == "email":
+                          email = tag["Value"]
+                          break
+
+                  print("Email:", email)
+                  data[0]['email_user'] = email
+                  print(f"Data ready for further processing: {data}")
+
+                  ################# Inserting in DynamoDB #####################
+                  # Insert data into DynamoDB table
+                  func_for_put_item_in_dynamodb(data, table_name)
+              
+              except s3_client.exceptions.NoSuchKey:
+                  return {
+                      'statusCode': 404,
+                      'body': json.dumps({'message': 'File not found in S3.'})
+                  }
+              except ValueError as e:
+                  return {
+                      'statusCode': 400,
+                      'body': json.dumps({'message': str(e)}),
+                  }
+              except Exception as e:
+                  print(f"Unexpected Error: {str(e)}")
+                  return {
+                      'statusCode': 500,
+                      'body': json.dumps({'message': f"Error: {str(e)}"}),
+
+                  }
+
+
+      PackageType: Zip  # Specifies that the Lambda function is being deployed with inline code
+
+
+  # LambdaInvokePolicy:
+  #   Type: 'AWS::IAM::Policy'
+  #   Properties:
+  #     PolicyName: 'LambdaInvokePolicy'
+  #     Roles:
+  #       - Ref: 'LambdaExecutionRole'
+  #     PolicyDocument:
+  #       Version: '2012-10-17'
+  #       Statement:
+  #         - Effect: 'Allow'
+  #           Action:
+  #             - 'lambda:InvokeFunction'
+  #           Resource:
+  #             - 'arn:aws:lambda:us-east-1:205930633177:function:lambda-func-for-reading'
+
+  LambdaFunctionPolicy:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: 'lambda-func-for-reading'
+      Principal: 's3.amazonaws.com'
+      SourceAccount: '205930633177'
+      SourceArn: !Sub 'arn:aws:s3:::project-bucket-for-json-file'
+    DependsOn:
+      - LambdaFunction    
+
+
+################ Section For Another Lambda Function For Extracting Details From DynamoDB ######################
+
+  AnotherLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service: lambda.amazonaws.com
+      Policies:
+        - PolicyName: CloudWatchLogsPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                Resource: arn:aws:logs:us-east-1:205930633177:*
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                Resource: arn:aws:logs:us-east-1:205930633177:log-group:/aws/lambda/func-for-dynamoDB:*
+              - Effect: Allow
+                Action:
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:us-east-1:205930633177:log-group:/aws/lambda/func-for-dynamoDB:*
+        - PolicyName: LambdaPolicyForSESFullAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ses:*
+                Resource: "*" 
+        - PolicyName: LambdaDynamoDBFullAccessPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:*
+                Resource: "*" 
+        - PolicyName: LambdaPolicyForS3GetObjectTags
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObjectTagging
+                  - s3:GetBucketTagging
+                Resource: "*" 
+
+  AnotherLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: func-for-dynamoDB
+      Handler: index.lambda_handler
+      Role: !GetAtt AnotherLambdaExecutionRole.Arn
+      Runtime: python3.8
+      Timeout: 10
+      MemorySize: 128
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+
+          # SES client initialization
+          ses_client = boto3.client('ses', region_name='us-east-1')
+
+          def lambda_handler(event, context):
+              # Extract relevant information from the single event
+              print(event)
+
+              event_updated = event[0]
+              print(f"event_updated is: {event_updated}")
+              event_id = event_updated['eventID']
+              event_name = event_updated['eventName']
+              event_source = event_updated['eventSource']
+              aws_region = event_updated['awsRegion']
+              dynamodb_data = event_updated['dynamodb']
+              
+              # Log basic event metadata
+              print(f"Event ID: {event_id}")
+              print(f"Event Name: {event_name}")
+              print(f"Event Source: {event_source}")
+              print(f"AWS Region: {aws_region}")
+              
+              # Extract and process DynamoDB data dynamically
+              if 'NewImage' in dynamodb_data:
+                  new_image = dynamodb_data['NewImage']
+                  print("New Image Data:")
+                  
+                  # Initialize variables to store the email user and invoice details
+                  email_user = None
+                  invoice_id = None
+                  amount = None
+                  due_date = None
+                  company_name = None
+
+                  # Iterate over the items in the DynamoDB record
+                  for key, value in new_image.items():
+                      # Extract type and value dynamically
+                      field_type = list(value.keys())[0]  # e.g., 'S', 'N'
+                      field_value = list(value.values())[0]
+                      
+                      # Convert numeric values if necessary
+                      if field_type == 'N':
+                          field_value = float(field_value)
+                      
+                      # Check for specific fields and store their values
+                      if key == 'email_user':
+                          email_user = field_value
+                      if key == 'invoice_id':
+                          invoice_id = field_value
+                      if key == 'invoice_amount':
+                          amount = field_value
+                      if key == 'due_date':
+                          due_date = field_value
+                      if key == 'vendor_email':
+                          company_name = field_value
+
+                      print(f"  {key}: {field_value}")
+
+                  # After the loop, check if we have the necessary fields to send an email
+                  if email_user and invoice_id and amount and due_date:
+                      try:
+                          # Format the email subject and body
+                          subject = f"Invoice Receipt Confirmation - {invoice_id}"
+                          body_text = f"""
+          Dear {company_name if company_name else 'Customer'},
+
+          We have successfully received your invoice with the following details:
+
+          Invoice ID: {invoice_id}
+          Amount: ${amount:,.2f}
+          Due Date: {due_date}
+
+          Thank you for your submission.
+                          """
+                          
+                          body_html = f"""
+          <html>
+            <body>
+              <p>Dear {company_name if company_name else 'Customer'},</p>
+              <p>We have successfully received your invoice with the following details:</p>
+              <ul>
+                <li><strong>Invoice ID:</strong> {invoice_id}</li>
+                <li><strong>Amount:</strong> ${amount:,.2f}</li>
+                <li><strong>Due Date:</strong> {due_date}</li>
+              </ul>
+              <p>Thank you for your submission.</p>
+            </body>
+          </html>
+                          """
+                          
+                          # Sending the email
+                          ses_response = ses_client.send_email(
+                              Source='zahankhurram45@gmail.com',  # Replace with your SES verified email
+                              Destination={
+                                  'ToAddresses': [email_user]
+                              },
+                              Message={
+                                  'Subject': {
+                                      'Data': subject,  # Use dynamic subject
+                                      'Charset': 'UTF-8'  # Charset for the subject
+                                  },
+                                  'Body': {
+                                      'Text': {
+                                          'Data': body_text,  # Plain text body
+                                          'Charset': 'UTF-8'  # Charset for the plain text body
+                                      },
+                                      'Html': {
+                                          'Data': body_html,  # HTML body
+                                          'Charset': 'UTF-8'  # Charset for the HTML body
+                                      }
+                                  }
+                              }
+                          )
+                          print(f"Email sent successfully to {email_user}")
+                      except Exception as e:
+                          print(f"Failed to send email to {email_user}: {e}")
+                  else:
+                      print("Required fields are missing from the record.")
+              else:
+                  print("No NewImage data found in the event.")
+              
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps('Processed single DynamoDB event dynamically')
+              }
+
+
+
+
+      PackageType: Zip  # Specifies that the Lambda function is being deployed with inline code
+
+
+################# Creating DynamoDB Table ############################
+  VendorInvoicesTable:
+    Type: AWS::DynamoDB::Table
+    DependsOn:
+      - LambdaFunction
+      - AnotherLambdaFunction
+    Properties:
+      TableName: VendorInvoices
+      AttributeDefinitions:
+        - AttributeName: invoice_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: invoice_id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+
+
+################## Section For Creating EventBridge Pipe ############################
+
+  PipeExecutionRole:
+    Type: AWS::IAM::Role
+    DependsOn:
+      - VendorInvoicesTable
+    Properties:
+      RoleName: pipe-execution-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: pipes.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: PipeSourcePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:DescribeStream
+                  - dynamodb:GetRecords
+                  - dynamodb:GetShardIterator
+                  - dynamodb:ListStreams
+                Resource:
+                  - !GetAtt VendorInvoicesTable.StreamArn
+        - PolicyName: PipeTargetPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - arn:aws:lambda:us-east-1:205930633177:function:func-for-dynamoDB
+
+
+
+  VendorInvoicesPipe:
+    Type: AWS::Pipes::Pipe
+    DependsOn:
+      - LambdaFunction
+      - AnotherLambdaFunction
+    Properties:
+      RoleArn:
+        Fn::GetAtt: [PipeExecutionRole, Arn]
+      Description: Pipe connecting VendorInvoices DynamoDB stream to Lambda function
+      DesiredState: RUNNING
+      Source:
+        Fn::GetAtt: [VendorInvoicesTable, StreamArn]
+      Target: arn:aws:lambda:us-east-1:205930633177:function:func-for-dynamoDB
+      SourceParameters: 
+        DynamoDBStreamParameters:
+          StartingPosition: TRIM_HORIZON
+
+
+
+
+
+  ################# Custom Resource Section ########################################
+
+  CustomResourceLambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: LoggingPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+        - PolicyName: S3Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:List*
+                  - s3:DeleteObject
+                Resource: '*'
+        - PolicyName: DynamoDBPolicy  # Added DynamoDB permissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:*
+                Resource: "*"
+
+
+  CustomResourceLambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Role: !GetAtt CustomResourceLambdaExecutionRole.Arn  # IAM role assigned to the Lambda
+      Handler: index.handler  # The function within the file to be executed (update based on your code)
+      Runtime: python3.8  # Lambda runtime (adjust if using a different version)
+      Code:
+        ZipFile: |
+          import cfnresponse
+          import boto3
+
+          def handler(event, context):
+              print(event)
+              print('boto version ' + boto3.__version__)
+
+              # Globals
+              responseData = {}
+              ResponseStatus = cfnresponse.SUCCESS
+              s3bucketName = event['ResourceProperties']['s3bucketName']
+
+              if event['RequestType'] == 'Create':
+                  responseData['Message'] = "Resource creation successful!"
+
+              elif event['RequestType'] == 'Update':
+                  responseData['Message'] = "Resource update successful!"
+
+              elif event['RequestType'] == 'Delete':
+                  # Delete all objects in the S3 bucket
+                  s3 = boto3.resource('s3')
+                  bucket = s3.Bucket(s3bucketName)
+                  bucket.objects.all().delete()
+
+                  # Delete the DynamoDB table "VendorInvoices"
+                  dynamodb = boto3.client('dynamodb')
+                  try:
+                      dynamodb.delete_table(TableName='VendorInvoices')
+                      print("DynamoDB table 'VendorInvoices' deleted successfully.")
+                  except dynamodb.exceptions.ResourceNotFoundException:
+                      print("DynamoDB table 'VendorInvoices' not found.")
+                  except Exception as e:
+                      print(f"Error deleting DynamoDB table: {e}")
+
+                  responseData['Message'] = "Resource deletion successful!"
+
+              # Send response to CloudFormation
+              cfnresponse.send(event, context, ResponseStatus, responseData)
+
+  CustomResource:
+      Type: Custom::CustomResource
+      Properties:
+          ServiceToken: !GetAtt CustomResourceLambdaFunction.Arn
+          s3bucketName: !Ref S3Bucket
+      DependsOn: S3Bucket
+
+Outputs:
+  EC2InstancePublicIP:
+    Description: 'Public IPv4 address of the EC2 instance'
+    Value: !GetAtt EC2Instance.PublicIp
+
+  S3BucketName:
+    Description: 'S3 bucket name for Stack 2'
+    Value: !Ref 'S3Bucket'
+    Export:
+      Name: 'project-bucket-for-json-file'  # Export the bucket name
