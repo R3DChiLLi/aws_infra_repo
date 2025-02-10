@@ -5,7 +5,7 @@ Resources:
     Properties:
       InstanceType: t2.micro  # You can change this based on your needs
       ImageId: ami-0453ec754f44f9a4a
-      KeyName: id_rsa
+      KeyName: my_ec2_key
       SecurityGroupIds:
         - 'launch-wizard-1'  # Your existing security group
       AvailabilityZone: us-east-1a
