@@ -8,7 +8,7 @@ Resources:
       KeyName: my_ec2_key
       SecurityGroupIds:
         - 'launch-wizard-1'  # Your existing security group
-      AvailabilityZone: us-east-1a
+      AvailabilityZone: us-east-1b
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:

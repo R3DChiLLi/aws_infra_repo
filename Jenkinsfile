@@ -1,4 +1,4 @@
-def currentStackStatusAndDeploying () {
+def currentStackStatusAndDeploying() {
     return '''
     stack_status=$(aws cloudformation describe-stacks --stack-name user-form-app-project | jq -r '.Stacks[0].StackStatus')
     if [[ "$stack_status" == "CREATE_COMPLETE" || "$stack_status" == "UPDATE_COMPLETE" ]]; then
@@ -15,7 +15,9 @@ def currentStackStatusAndDeploying () {
         if echo "$update_output" | grep -q "No updates are to be performed"; then
             echo "No changes detected. Skipping update."
         else
-            echo "Stack update initiated."
+            echo "Stack update initiated. Waiting for update to complete..."
+            aws cloudformation wait stack-update-complete --stack-name user-form-app-project --region us-east-1
+            echo "Stack update completed."
         fi
     else
         echo "Stack doesn't exist or is not in a complete state, creating the stack..."
@@ -27,6 +29,7 @@ def currentStackStatusAndDeploying () {
     fi
     '''
 }
+
 
 pipeline {
     agent any
