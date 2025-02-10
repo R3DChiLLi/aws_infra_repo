@@ -11,49 +11,16 @@ Resources:
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
-            VolumeSize: 8  # 8GB root volume
+            VolumeSize: 10  # 8GB root volume
             VolumeType: gp2
       IamInstanceProfile:
         Ref: EC2InstanceRoleAttachment  # Attach the IAM Instance Profile to the EC2 instance
       UserData:
         Fn::Base64: |
           #!/bin/bash
-          sudo yum install httpd -y
-          yum install -y curl
-          sudo systemctl start httpd
-          sudo systemctl enable httpd
-
-          # Update and install necessary tools
-          sudo yum update -y
-          sudo yum install -y nodejs npm git
-          sleep 10
-
-          # Clone the repository
-          cd /var/www/html/
-          rm -rf index.html
-          git clone https://github.com/R3DChiLLi/user-form-app.git
-          mv user-form-app/index.html index.html
-          rm -rf user-form-app
-          
-          # Get the current public IPv4 address
-          current_ip=$(curl -s ifconfig.me)
-
-          # File path of index.html
-          file_path="/var/www/html/index.html"
-
-          # Update the IP in the fetch URL using sed
-          sed -i "s|http://[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}:3000|http://${current_ip}:3000|g" "$file_path"
-
-          cd /home/ec2-user/
-          git clone https://github.com/R3DChiLLi/user-form-app.git
-          cd user-form-app
-          rm -rf index.html
-
-          # Install dependencies
-          npm install
-          sleep 7
-          # Run the app
-          node app.js
+          yum install docker -y
+          usermod -aG docker ec2-user
+          systemctl start docker
 
   EC2InstanceRole:
     Type: 'AWS::IAM::Role'
