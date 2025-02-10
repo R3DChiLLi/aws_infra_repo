@@ -1,9 +1,12 @@
 def currentStackStatusAndDeploying() {
     return '''
     stack_status=$(aws cloudformation describe-stacks --stack-name user-form-app-project | jq -r '.Stacks[0].StackStatus')
+    
+    echo "Current CloudFormation Stack Status: ${stack_status}"
+    
     if [[ "$stack_status" == "CREATE_COMPLETE" || "$stack_status" == "UPDATE_COMPLETE" ]]; then
         echo "Stack exists, updating the stack..."
-        # Capture the output of the update-stack command, even if it fails.
+        
         update_output=$(aws cloudformation update-stack \
             --template-body file://aws/user-form-app.yaml \
             --stack-name user-form-app-project \
@@ -19,8 +22,13 @@ def currentStackStatusAndDeploying() {
             aws cloudformation wait stack-update-complete --stack-name user-form-app-project --region us-east-1
             echo "Stack update completed."
         fi
+        
+    elif [[ "$stack_status" == "CREATE_IN_PROGRESS" ]]; then
+        echo "Stack is currently being created (status: ${stack_status}). Aborting deployment." >&2
+        exit 1
+        
     else
-        echo "Stack doesn't exist or is not in a complete state, creating the stack..."
+        echo "Stack doesn't exist or is in an unexpected state, creating the stack..."
         aws cloudformation deploy \
             --template-file aws/user-form-app.yaml \
             --stack-name user-form-app-project \
@@ -31,35 +39,11 @@ def currentStackStatusAndDeploying() {
 }
 
 
+
 pipeline {
     agent any
 
     stages {
-
-        stage('Checking Stability of CF') {
-            agent {
-                docker {
-                    image 'amazon/aws-cli'
-                    args "-u root --entrypoint='' --network=host"
-                    reuseNode true
-                }
-            }
-            
-            steps {
-                sh '''
-                yum install jq -y
-                status=$(aws cloudformation describe-stacks --stack-name user-form-app-project | jq -r '.Stacks[0].StackStatus')
-                echo "Current CloudFormation Stack Status: ${status}"
-                if [ "$status" = "CREATE_COMPLETE" ] || [ "$status" = "UPDATE_COMPLETE" ]; then
-                    echo "Stack is stable."
-                else
-                    echo "Stack is not stable (status: ${status}). Aborting deployment." >&2
-                    exit 1
-                fi
-                '''
-            }
-        }
-
         stage('Deploying Stack on Cloudformation') {
             agent {
                 docker {
