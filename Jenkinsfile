@@ -6,19 +6,32 @@ pipeline {
             agent {
                 docker {
                     image 'amazon/aws-cli'
-                    args "--rm --entrypoint='' --network=host"
+                    args "-u root --rm --entrypoint='' --network=host"
                     reuseNode true
                 }
             }
             steps {
                 sh '''
-                aws cloudformation deploy \
-                --template-file aws/user-form-app.yaml \
-                --stack-name user-form-app-project \
-                --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-                --region us-east-1 \
+                yum install jq -y
+
+                stack_status=$(aws cloudformation describe-stacks --stack-name user-form-app-project | jq -r '.Stacks[0].StackStatus')
+                if [[ "$stack_status" == "CREATE_COMPLETE" || "$stack_status" == "UPDATE_COMPLETE" ]]; then
+                    echo "Stack exists, updating the stack..."
+                    aws cloudformation update-stack \
+                        --template-file aws/user-form-app.yaml \
+                        --stack-name user-form-app-project \
+                        --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+                        --region us-east-1
+                else
+                    echo "Stack doesn't exist or not in a complete state, creating the stack..."
+                    aws cloudformation deploy \
+                        --template-file aws/user-form-app.yaml \
+                        --stack-name user-form-app-project \
+                        --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+                        --region us-east-1
+                fi
                 '''
             }
         }
-        }
+    }
 }
