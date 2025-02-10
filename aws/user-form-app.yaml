@@ -6,7 +6,7 @@ Resources:
       InstanceType: t2.micro  # You can change this based on your needs
       ImageId: ami-0453ec754f44f9a4a
       SecurityGroupIds:
-        - 'launch-wizard-4'  # Your existing security group
+        - 'launch-wizard-1'  # Your existing security group
       AvailabilityZone: us-east-1a
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
@@ -74,6 +74,15 @@ Resources:
               - Effect: 'Allow'
                 Action:
                   - 's3:*'
+                Resource: '*'
+  
+        - PolicyName: 'CFDescribeStacks'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 'cloudformation:DescribeStacks'
                 Resource: '*'
 
   EC2InstanceRoleAttachment:

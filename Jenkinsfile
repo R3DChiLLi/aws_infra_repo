@@ -1,4 +1,4 @@
-def currentStackStatus () {
+def currentStackStatusAndDeploying () {
     return '''
     stack_status=$(aws cloudformation describe-stacks --stack-name user-form-app-project | jq -r '.Stacks[0].StackStatus')
     if [[ "$stack_status" == "CREATE_COMPLETE" || "$stack_status" == "UPDATE_COMPLETE" ]]; then
@@ -45,12 +45,11 @@ pipeline {
                 yum install jq -y
 
                 # Get the current stack status
-                ${currentStackStatus ()}
+                ${currentStackStatusAndDeploying ()}
                 """
             }
         }
 
     }
 }
-
 
