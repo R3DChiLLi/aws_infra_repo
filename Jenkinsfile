@@ -43,8 +43,6 @@ pipeline {
             steps {
                 sh """
                 yum install jq -y
-
-                # Get the current stack status
                 ${currentStackStatusAndDeploying ()}
                 """
             }
