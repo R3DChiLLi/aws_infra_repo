@@ -32,6 +32,31 @@ pipeline {
     agent any
 
     stages {
+
+        stage('Checking Stability of CF') {
+            agent {
+                docker {
+                    image 'amazon/aws-cli'
+                    args "-u root --rm --entrypoint='' --network=host"
+                    reuseNode true
+                }
+            }
+            
+            steps {
+                sh '''
+                yum install jq -y
+                status=$(aws cloudformation describe-stacks --stack-name user-form-app-project | jq -r '.Stacks[0].StackStatus')
+                echo "Current CloudFormation Stack Status: ${status}"
+                if [ "$status" = "CREATE_COMPLETE" ] || [ "$status" = "UPDATE_COMPLETE" ]; then
+                    echo "Stack is stable."
+                else
+                    echo "Stack is not stable (status: ${status}). Aborting deployment." >&2
+                    exit 1
+                fi
+                '''
+            }
+        }
+
         stage('Deploying Stack on Cloudformation') {
             agent {
                 docker {
