@@ -1,18 +1,78 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Resources:
+################################# ALB PART ######################################
+  SgForAlb:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group allowing HTTP (80) from anywhere
+      VpcId: vpc-02e721dc7e0b01010
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: '0.0.0.0/0'  # Allowing HTTP from anywhere (IPv4)
+  
+  # Application Load Balancer
+  MyAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: my-alb
+      Subnets:
+        - subnet-07532312d7d4c2e63  # Replace with actual subnet ID
+        - subnet-0d67236efec7d0fd7  # Replace with actual subnet ID
+      SecurityGroups:
+        - Ref: SgForAlb
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+      Scheme: internet-facing
+      Type: application
+      IpAddressType: ipv4
+
+  # Target Group
+  MyTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: my-tg
+      Port: 80
+      Protocol: HTTP
+      VpcId: vpc-02e721dc7e0b01010  # Replace with your VPC ID
+      TargetType: instance
+      Targets:
+        - Id: !Ref EC2Instance  # Registers the EC2 instance
+          Port: 80           # The port on which the instance is listening.
+
+
+  # Security Group for EC2 Instance
+  SgForEc2:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group allowing HTTP traffic from the ALB security group
+      VpcId: vpc-02e721dc7e0b01010
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          SourceSecurityGroupId: !Ref SgForAlb  # Allow HTTP traffic from ALB security group
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: '0.0.0.0/0'
+
+  # EC2 Instance
   EC2Instance:
     Type: 'AWS::EC2::Instance'
     Properties:
       InstanceType: t2.micro  # You can change this based on your needs
-      ImageId: ami-0453ec754f44f9a4a
-      KeyName: my_ec2_key
+      ImageId: ami-0453ec754f44f9a4a  # Replace with your AMI ID
+      KeyName: my_ec2_key  # Replace with your EC2 key pair name
       SecurityGroupIds:
-        - 'launch-wizard-1'  # Your existing security group
-      AvailabilityZone: us-east-1b
+        - Ref: SgForEc2  # Attach the EC2 security group
+      AvailabilityZone: us-east-1b  # Replace with your preferred AZ
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
-            VolumeSize: 10  # 8GB root volume
+            VolumeSize: 10  # 10GB root volume
             VolumeType: gp2
       IamInstanceProfile:
         Ref: EC2InstanceRoleAttachment  # Attach the IAM Instance Profile to the EC2 instance
@@ -22,6 +82,15 @@ Resources:
           yum install docker git -y
           usermod -aG docker ec2-user
           systemctl start docker
+          sudo curl -L "https://github.com/docker/compose/releases/download/v2.19.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
+          git clone https://github.com/R3DChiLLi/user-form-app.git
+          cd user-form-app/
+          cd frontend/
+          chmod 700 change-pub-ip.sh
+          ./change-pub-ip.sh
+          cd ../
+          docker-compose up -d
 
   EC2InstanceRole:
     Type: 'AWS::IAM::Role'
@@ -53,11 +122,34 @@ Resources:
                   - 'cloudformation:DescribeStacks'
                 Resource: '*'
 
+        - PolicyName: 'ELBDescribe'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 'elasticloadbalancing:DescribeLoadBalancers'
+                Resource: '*'
+
   EC2InstanceRoleAttachment:
     Type: 'AWS::IAM::InstanceProfile'
     Properties:
       Roles:
         - Ref: 'EC2InstanceRole'  # Reference the IAM role
+
+
+  # Listener for the Application Load Balancer
+  MyAlbListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref MyTargetGroup  
+      LoadBalancerArn: !Ref MyAlb
+      Port: 80
+      Protocol: HTTP
+
+################################################################
 
   S3Bucket:
     Type: 'AWS::S3::Bucket'
@@ -739,3 +831,7 @@ Outputs:
     Value: !Ref 'S3Bucket'
     Export:
       Name: 'project-bucket-for-json-file'  # Export the bucket name
+
+  ALBDNSName:
+    Description: "DNS Name of the ALB"
+    Value: !GetAtt MyAlb.DNSName
