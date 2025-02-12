@@ -83,14 +83,7 @@ Resources:
           usermod -aG docker ec2-user
           systemctl start docker
           sudo curl -L "https://github.com/docker/compose/releases/download/v2.19.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
-          git clone https://github.com/R3DChiLLi/user-form-app.git
-          cd user-form-app/
-          cd frontend/
-          chmod 700 change-pub-ip.sh
-          ./change-pub-ip.sh
-          cd ../
-          docker-compose up -d
+          sudo chmod +x /usr/local/bin/docker-compose.
 
   EC2InstanceRole:
     Type: 'AWS::IAM::Role'
