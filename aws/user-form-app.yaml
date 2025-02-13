@@ -82,8 +82,7 @@ Resources:
           yum install docker git -y
           usermod -aG docker ec2-user
           systemctl start docker
-          sudo su - ec2-user
-          sudo curl -L "https://github.com/docker/compose/releases/download/v2.19.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo -u ec2-user curl -L "https://github.com/docker/compose/releases/download/v2.19.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
           sudo chmod +x /usr/local/bin/docker-compose.
 
   EC2InstanceRole:
