@@ -23,7 +23,7 @@ def currentStackStatusAndDeploying() {
             echo "Stack update completed."
         fi
         
-    elif [[ "$stack_status" == "CREATE_IN_PROGRESS" || "$stack_status" == "REVIEW_IN_PROGRESS" || "$stack_status" == "ROLLBACK_IN_PROGRESS" ]]; then
+    elif [[ "$stack_status" == "CREATE_IN_PROGRESS" || "$stack_status" == "REVIEW_IN_PROGRESS" || "$stack_status" == "ROLLBACK_IN_PROGRESS" "$stack_status" == "ROLLBACK_COMPLETE" ]]; then
         echo "Stack is currently being created (status: ${stack_status}). Aborting deployment." >&2
         exit 1
         
