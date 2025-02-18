@@ -145,70 +145,70 @@ Resources:
 # ################################################################
 
 
+################################# ALB PART For ECS ######################################
 
+  # Security Group for ALB
+  SgForAlb:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group allowing HTTP (80) from anywhere
+      VpcId: vpc-02e721dc7e0b01010
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: '0.0.0.0/0'  # Allowing HTTP from anywhere (IPv4)
 
-AWSTemplateFormatVersion: '2010-09-09'
+  # Application Load Balancer
+  MyAlb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: my-alb
+      Subnets:
+        - subnet-07532312d7d4c2e63  # Replace with actual subnet ID
+        - subnet-0d67236efec7d0fd7  # Replace with actual subnet ID
+        - subnet-038b50e4c8ebc4536
+        - subnet-08855a3a0cbaf6744
+        - subnet-0acd21e661b813ba4
+        - subnet-019c52dffda2a0d12
+      SecurityGroups:
+        - Ref: SgForAlb
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+      Scheme: internet-facing
+      Type: application
+      IpAddressType: ipv4
 
-################################# ALB PART ######################################
+  # Target Group for ECS Tasks (IP-based)
+  MyTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: my-tg
+      Port: 80
+      Protocol: HTTP
+      VpcId: vpc-02e721dc7e0b01010  # Replace with your VPC ID
+      TargetType: ip  # Use 'ip' since we are targeting ECS tasks
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: 'traffic-port'
+      HealthCheckPath: '/'
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: '200'
 
-# Security Group for ALB
-SgForAlb:
-  Type: AWS::EC2::SecurityGroup
-  Properties:
-    GroupDescription: Security group allowing HTTP (80) from anywhere
-    VpcId: vpc-02e721dc7e0b01010
-    SecurityGroupIngress:
-      - IpProtocol: tcp
-        FromPort: '80'
-        ToPort: '80'
-        CidrIp: '0.0.0.0/0'  # Allowing HTTP from anywhere (IPv4)
-
-# Application Load Balancer
-MyAlb:
-  Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-  Properties:
-    Name: my-alb
-    Subnets:
-      - subnet-07532312d7d4c2e63  # Replace with actual subnet ID
-      - subnet-0d67236efec7d0fd7  # Replace with actual subnet ID
-    SecurityGroups:
-      - Ref: SgForAlb
-    LoadBalancerAttributes:
-      - Key: idle_timeout.timeout_seconds
-        Value: '60'
-    Scheme: internet-facing
-    Type: application
-    IpAddressType: ipv4
-
-# Target Group for ECS Tasks (IP-based)
-MyTargetGroup:
-  Type: AWS::ElasticLoadBalancingV2::TargetGroup
-  Properties:
-    Name: my-tg
-    Port: 80
-    Protocol: HTTP
-    VpcId: vpc-02e721dc7e0b01010  # Replace with your VPC ID
-    TargetType: ip  # Use 'ip' since we are targeting ECS tasks
-    HealthCheckProtocol: HTTP
-    HealthCheckPort: 'traffic-port'
-    HealthCheckPath: '/'
-    HealthCheckIntervalSeconds: 30
-    HealthCheckTimeoutSeconds: 5
-    HealthyThresholdCount: 3
-    UnhealthyThresholdCount: 3
-    Matcher:
-      HttpCode: '200'
-
-# ALB Listener
-MyAlbListener:
-  Type: AWS::ElasticLoadBalancingV2::Listener
-  Properties:
-    DefaultActions:
-      - Type: forward
-        TargetGroupArn: !Ref MyTargetGroup  
-    LoadBalancerArn: !Ref MyAlb
-    Port: 80
-    Protocol: HTTP
+  # ALB Listener
+  MyAlbListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref MyTargetGroup  
+      LoadBalancerArn: !Ref MyAlb
+      Port: 80
+      Protocol: HTTP
 
 ####################################################################################
 
@@ -327,6 +327,10 @@ MyAlbListener:
           SecurityGroups:
             - !Ref ECSSGForService
           AssignPublicIp: ENABLED
+      LoadBalancers:
+        - TargetGroupArn: !Ref MyTargetGroup  # Attach ALB Target Group
+          ContainerName: frontend  # Name of the container in your Task Definition
+          ContainerPort: 80  # Port the container listens on
       ServiceConnectConfiguration:
         Enabled: true
         Namespace: backend
