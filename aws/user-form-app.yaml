@@ -1,148 +1,272 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Resources:
-################################# ALB PART ######################################
-  SgForAlb:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security group allowing HTTP (80) from anywhere
-      VpcId: vpc-02e721dc7e0b01010
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: '80'
-          ToPort: '80'
-          CidrIp: '0.0.0.0/0'  # Allowing HTTP from anywhere (IPv4)
+# ################################# ALB PART ######################################
+#   SgForAlb:
+#     Type: AWS::EC2::SecurityGroup
+#     Properties:
+#       GroupDescription: Security group allowing HTTP (80) from anywhere
+#       VpcId: vpc-02e721dc7e0b01010
+#       SecurityGroupIngress:
+#         - IpProtocol: tcp
+#           FromPort: '80'
+#           ToPort: '80'
+#           CidrIp: '0.0.0.0/0'  # Allowing HTTP from anywhere (IPv4)
   
-  # Application Load Balancer
-  MyAlb:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    Properties:
-      Name: my-alb
-      Subnets:
-        - subnet-07532312d7d4c2e63  # Replace with actual subnet ID
-        - subnet-0d67236efec7d0fd7  # Replace with actual subnet ID
-      SecurityGroups:
-        - Ref: SgForAlb
-      LoadBalancerAttributes:
-        - Key: idle_timeout.timeout_seconds
-          Value: '60'
-      Scheme: internet-facing
-      Type: application
-      IpAddressType: ipv4
+#   # Application Load Balancer
+#   MyAlb:
+#     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+#     Properties:
+#       Name: my-alb
+#       Subnets:
+#         - subnet-07532312d7d4c2e63  # Replace with actual subnet ID
+#         - subnet-0d67236efec7d0fd7  # Replace with actual subnet ID
+#       SecurityGroups:
+#         - Ref: SgForAlb
+#       LoadBalancerAttributes:
+#         - Key: idle_timeout.timeout_seconds
+#           Value: '60'
+#       Scheme: internet-facing
+#       Type: application
+#       IpAddressType: ipv4
 
-  # Target Group
-  MyTargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      Name: my-tg
-      Port: 80
-      Protocol: HTTP
-      VpcId: vpc-02e721dc7e0b01010  # Replace with your VPC ID
-      TargetType: instance
-      Targets:
-        - Id: !Ref EC2Instance  # Registers the EC2 instance
-          Port: 80           # The port on which the instance is listening.
+#   # Target Group
+#   MyTargetGroup:
+#     Type: AWS::ElasticLoadBalancingV2::TargetGroup
+#     Properties:
+#       Name: my-tg
+#       Port: 80
+#       Protocol: HTTP
+#       VpcId: vpc-02e721dc7e0b01010  # Replace with your VPC ID
+#       TargetType: instance
+#       Targets:
+#         - Id: !Ref EC2Instance  # Registers the EC2 instance
+#           Port: 80           # The port on which the instance is listening.
 
 
-  # Security Group for EC2 Instance
-  SgForEc2:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Security group allowing HTTP traffic from the ALB security group
-      VpcId: vpc-02e721dc7e0b01010
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: '80'
-          ToPort: '80'
-          SourceSecurityGroupId: !Ref SgForAlb  # Allow HTTP traffic from ALB security group
-        - IpProtocol: tcp
-          FromPort: '22'
-          ToPort: '22'
-          CidrIp: '0.0.0.0/0'
+#   # Security Group for EC2 Instance
+#   SgForEc2:
+#     Type: AWS::EC2::SecurityGroup
+#     Properties:
+#       GroupDescription: Security group allowing HTTP traffic from the ALB security group
+#       VpcId: vpc-02e721dc7e0b01010
+#       SecurityGroupIngress:
+#         - IpProtocol: tcp
+#           FromPort: '80'
+#           ToPort: '80'
+#           SourceSecurityGroupId: !Ref SgForAlb  # Allow HTTP traffic from ALB security group
+#         - IpProtocol: tcp
+#           FromPort: '22'
+#           ToPort: '22'
+#           CidrIp: '0.0.0.0/0'
 
-  # EC2 Instance
-  EC2Instance:
-    Type: 'AWS::EC2::Instance'
-    Properties:
-      InstanceType: t2.micro  # You can change this based on your needs
-      ImageId: ami-0453ec754f44f9a4a  # Replace with your AMI ID
-      KeyName: my_ec2_key  # Replace with your EC2 key pair name
-      SecurityGroupIds:
-        - Ref: SgForEc2  # Attach the EC2 security group
-      AvailabilityZone: us-east-1b  # Replace with your preferred AZ
-      BlockDeviceMappings:
-        - DeviceName: /dev/xvda
-          Ebs:
-            VolumeSize: 10  # 10GB root volume
-            VolumeType: gp2
-      IamInstanceProfile:
-        Ref: EC2InstanceRoleAttachment  # Attach the IAM Instance Profile to the EC2 instance
-      UserData:
-        Fn::Base64: |
-          #!/bin/bash
-          yum install docker git -y
-          usermod -aG docker ec2-user
-          systemctl start docker
-          sudo -u ec2-user curl -L "https://github.com/docker/compose/releases/download/v2.19.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-          sudo chmod +x /usr/local/bin/docker-compose
+#   # EC2 Instance
+#   EC2Instance:
+#     Type: 'AWS::EC2::Instance'
+#     Properties:
+#       InstanceType: t2.micro  # You can change this based on your needs
+#       ImageId: ami-0453ec754f44f9a4a  # Replace with your AMI ID
+#       KeyName: my_ec2_key  # Replace with your EC2 key pair name
+#       SecurityGroupIds:
+#         - Ref: SgForEc2  # Attach the EC2 security group
+#       AvailabilityZone: us-east-1b  # Replace with your preferred AZ
+#       BlockDeviceMappings:
+#         - DeviceName: /dev/xvda
+#           Ebs:
+#             VolumeSize: 10  # 10GB root volume
+#             VolumeType: gp2
+#       IamInstanceProfile:
+#         Ref: EC2InstanceRoleAttachment  # Attach the IAM Instance Profile to the EC2 instance
+#       UserData:
+#         Fn::Base64: |
+#           #!/bin/bash
+#           yum install docker git -y
+#           usermod -aG docker ec2-user
+#           systemctl start docker
+#           sudo -u ec2-user curl -L "https://github.com/docker/compose/releases/download/v2.19.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+#           sudo chmod +x /usr/local/bin/docker-compose
 
-  EC2InstanceRole:
-    Type: 'AWS::IAM::Role'
+#   EC2InstanceRole:
+#     Type: 'AWS::IAM::Role'
+#     Properties:
+#       AssumeRolePolicyDocument:
+#         Version: '2012-10-17'
+#         Statement:
+#           - Effect: 'Allow'
+#             Action:
+#               - 'sts:AssumeRole'
+#             Principal:
+#               Service: 'ec2.amazonaws.com'
+#       Policies:
+#         - PolicyName: 'S3FullAccessPolicy'
+#           PolicyDocument:
+#             Version: '2012-10-17'
+#             Statement:
+#               - Effect: 'Allow'
+#                 Action:
+#                   - 's3:*'
+#                 Resource: '*'
+  
+#         - PolicyName: 'CFDescribeStacks'
+#           PolicyDocument:
+#             Version: '2012-10-17'
+#             Statement:
+#               - Effect: 'Allow'
+#                 Action:
+#                   - 'cloudformation:DescribeStacks'
+#                 Resource: '*'
+
+#         - PolicyName: 'ELBDescribe'
+#           PolicyDocument:
+#             Version: '2012-10-17'
+#             Statement:
+#               - Effect: 'Allow'
+#                 Action:
+#                   - 'elasticloadbalancing:DescribeLoadBalancers'
+#                 Resource: '*'
+
+#   EC2InstanceRoleAttachment:
+#     Type: 'AWS::IAM::InstanceProfile'
+#     Properties:
+#       Roles:
+#         - Ref: 'EC2InstanceRole'  # Reference the IAM role
+
+
+#   # Listener for the Application Load Balancer
+#   MyAlbListener:
+#     Type: AWS::ElasticLoadBalancingV2::Listener
+#     Properties:
+#       DefaultActions:
+#         - Type: forward
+#           TargetGroupArn: !Ref MyTargetGroup  
+#       LoadBalancerArn: !Ref MyAlb
+#       Port: 80
+#       Protocol: HTTP
+
+# ################################################################
+
+##################################### ECS PART ######################################
+  ECRRepository:
+    Type: AWS::ECR::Repository
     Properties:
+      RepositoryName: user-form-app-ecr-repo
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Keep only last 10 images",
+                "selection": {
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 10
+                },
+                "action": {
+                  "type": "expire"
+                }
+              }
+            ]
+          }
+  # 1) ECS Cluster
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: user-form-app-cluster
+      CapacityProviders:
+        - FARGATE
+
+  # 2) IAM Role for ECS Tasks
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: user-form-ecs-task-role
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Effect: 'Allow'
-            Action:
-              - 'sts:AssumeRole'
+          - Effect: Allow
             Principal:
-              Service: 'ec2.amazonaws.com'
-      Policies:
-        - PolicyName: 'S3FullAccessPolicy'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: 'Allow'
-                Action:
-                  - 's3:*'
-                Resource: '*'
-  
-        - PolicyName: 'CFDescribeStacks'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: 'Allow'
-                Action:
-                  - 'cloudformation:DescribeStacks'
-                Resource: '*'
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
 
-        - PolicyName: 'ELBDescribe'
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: 'Allow'
-                Action:
-                  - 'elasticloadbalancing:DescribeLoadBalancers'
-                Resource: '*'
-
-  EC2InstanceRoleAttachment:
-    Type: 'AWS::IAM::InstanceProfile'
+  # 5) ECS Task Definition (two containers: backend & frontend)
+  ECSTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
     Properties:
-      Roles:
-        - Ref: 'EC2InstanceRole'  # Reference the IAM role
+      Family: user-form-app-taskDefinition
+      Cpu: "512"
+      Memory: "1024"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      ExecutionRoleArn: arn:aws:iam::205930633177:role/ecsTaskExecutionRole
+      ContainerDefinitions:
+        - Name: backend
+          Image: r3dchilli/user-form-app-backend:latest
+          Cpu: 256
+          Memory: 512
+          Essential: true
+          PortMappings:
+            - ContainerPort: 3000
+              Name: backend
 
+        - Name: frontend
+          Image: r3dchilli/user-form-app-frontend:latest
+          Cpu: 256
+          Memory: 512
+          Essential: true
+          PortMappings:
+            - ContainerPort: 80
+          DependsOn:
+            - ContainerName: backend
+              Condition: START
 
-  # Listener for the Application Load Balancer
-  MyAlbListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
+  ECSSGForService:
+    Type: AWS::EC2::SecurityGroup
     Properties:
-      DefaultActions:
-        - Type: forward
-          TargetGroupArn: !Ref MyTargetGroup  
-      LoadBalancerArn: !Ref MyAlb
-      Port: 80
-      Protocol: HTTP
+      GroupName: ecs-sg-for-service
+      GroupDescription: "Security group for ECS service allowing inbound HTTP traffic"
+      VpcId: vpc-02e721dc7e0b01010
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
 
-################################################################
+  # 6) ECS Service with Service Connect
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ECSCluster
+      ServiceName: user-form-service
+      TaskDefinition: !Ref ECSTaskDefinition
+      LaunchType: FARGATE
+      DesiredCount: 1
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets:
+            - subnet-08855a3a0cbaf6744
+            - subnet-038b50e4c8ebc4536
+            - subnet-07532312d7d4c2e63
+          SecurityGroups:
+            - !Ref ECSSGForService
+          AssignPublicIp: ENABLED
+      ServiceConnectConfiguration:
+        Enabled: true
+        Namespace: backend
+        Services:
+          - ClientAliases:
+              - DnsName: backend 
+                Port: 3000
+            PortName: backend
+            DiscoveryName: backend
+
+#####################################################################################
+
 
   S3Bucket:
     Type: 'AWS::S3::Bucket'
@@ -815,9 +939,9 @@ Resources:
       DependsOn: S3Bucket
 
 Outputs:
-  EC2InstancePublicIP:
-    Description: 'Public IPv4 address of the EC2 instance'
-    Value: !GetAtt EC2Instance.PublicIp
+  # EC2InstancePublicIP:
+  #   Description: 'Public IPv4 address of the EC2 instance'
+  #   Value: !GetAtt EC2Instance.PublicIp
 
   S3BucketName:
     Description: 'S3 bucket name for Stack 2'
@@ -825,6 +949,6 @@ Outputs:
     Export:
       Name: 'project-bucket-for-json-file'  # Export the bucket name
 
-  ALBDNSName:
-    Description: "DNS Name of the ALB"
-    Value: !GetAtt MyAlb.DNSName
+  # ALBDNSName:
+  #   Description: "DNS Name of the ALB"
+  #   Value: !GetAtt MyAlb.DNSName
