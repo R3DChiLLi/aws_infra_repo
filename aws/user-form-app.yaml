@@ -144,6 +144,77 @@ Resources:
 
 # ################################################################
 
+
+
+
+AWSTemplateFormatVersion: '2010-09-09'
+
+################################# ALB PART ######################################
+
+# Security Group for ALB
+SgForAlb:
+  Type: AWS::EC2::SecurityGroup
+  Properties:
+    GroupDescription: Security group allowing HTTP (80) from anywhere
+    VpcId: vpc-02e721dc7e0b01010
+    SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: '0.0.0.0/0'  # Allowing HTTP from anywhere (IPv4)
+
+# Application Load Balancer
+MyAlb:
+  Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+  Properties:
+    Name: my-alb
+    Subnets:
+      - subnet-07532312d7d4c2e63  # Replace with actual subnet ID
+      - subnet-0d67236efec7d0fd7  # Replace with actual subnet ID
+    SecurityGroups:
+      - Ref: SgForAlb
+    LoadBalancerAttributes:
+      - Key: idle_timeout.timeout_seconds
+        Value: '60'
+    Scheme: internet-facing
+    Type: application
+    IpAddressType: ipv4
+
+# Target Group for ECS Tasks (IP-based)
+MyTargetGroup:
+  Type: AWS::ElasticLoadBalancingV2::TargetGroup
+  Properties:
+    Name: my-tg
+    Port: 80
+    Protocol: HTTP
+    VpcId: vpc-02e721dc7e0b01010  # Replace with your VPC ID
+    TargetType: ip  # Use 'ip' since we are targeting ECS tasks
+    HealthCheckProtocol: HTTP
+    HealthCheckPort: 'traffic-port'
+    HealthCheckPath: '/'
+    HealthCheckIntervalSeconds: 30
+    HealthCheckTimeoutSeconds: 5
+    HealthyThresholdCount: 3
+    UnhealthyThresholdCount: 3
+    Matcher:
+      HttpCode: '200'
+
+# ALB Listener
+MyAlbListener:
+  Type: AWS::ElasticLoadBalancingV2::Listener
+  Properties:
+    DefaultActions:
+      - Type: forward
+        TargetGroupArn: !Ref MyTargetGroup  
+    LoadBalancerArn: !Ref MyAlb
+    Port: 80
+    Protocol: HTTP
+
+####################################################################################
+
+
+
+
 ##################################### ECS PART ######################################
   ECRRepository:
     Type: AWS::ECR::Repository
@@ -169,6 +240,7 @@ Resources:
               }
             ]
           }
+
   # 1) ECS Cluster
   ECSCluster:
     Type: AWS::ECS::Cluster
