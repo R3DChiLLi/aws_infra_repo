@@ -312,6 +312,9 @@ Resources:
   # 6) ECS Service with Service Connect
   ECSService:
     Type: AWS::ECS::Service
+    DependsOn: 
+      - MyAlb  # Ensures ALB is created first
+      - MyTargetGroup  # Ensures Target Group exists before ECS service starts
     Properties:
       Cluster: !Ref ECSCluster
       ServiceName: user-form-service
