@@ -321,9 +321,12 @@ Resources:
       NetworkConfiguration:
         AwsvpcConfiguration:
           Subnets:
-            - subnet-08855a3a0cbaf6744
+            - subnet-07532312d7d4c2e63  # Replace with actual subnet ID
+            - subnet-0d67236efec7d0fd7  # Replace with actual subnet ID
             - subnet-038b50e4c8ebc4536
-            - subnet-07532312d7d4c2e63
+            - subnet-08855a3a0cbaf6744
+            - subnet-0acd21e661b813ba4
+            - subnet-019c52dffda2a0d12
           SecurityGroups:
             - !Ref ECSSGForService
           AssignPublicIp: ENABLED
