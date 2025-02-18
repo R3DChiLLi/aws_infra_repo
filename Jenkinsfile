@@ -59,33 +59,6 @@ pipeline {
                 """
             }
         }
-
-        stage('Get Env Variables') {
-            agent {
-                docker {
-                    image 'amazon/aws-cli'
-                    args "-u root --rm --entrypoint='' --network=host"
-                    reuseNode true
-                }
-            }
-            steps {
-                script {
-                    sh """
-                    yum install jq -y
-                    """
-                    env.AWS_ECR_REPOSITORY = sh(script: "aws ecr describe-repositories | jq -r '.repositories[0].repositoryUri' | cut -d'/' -f1", returnStdout: true)
-                }
-            }
-        }
-
-        stage('Build') {
-            steps {
-                sh """
-                echo 'repo name is: ${env.AWS_ECR_REPOSITORY}'
-                """
-            }
-        }
-
     }
 }
 
